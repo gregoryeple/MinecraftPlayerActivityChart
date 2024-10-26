@@ -1,0 +1,17 @@
+Using Python, create a program that will get time played for players on a minecraft server from a file and display it in a interactable graphical interface with multple graphs type with the following constraints:
+ - The data must be imported from every file located in the "data" folder and these files will contains lines in the following format "[DD/MM/YYYY HH:MM:SS] player joined|left" and all of this data must be stored in an associative array using the player as the index and the content must be the following:
+  - "sessions": Array of every session that the player played, from when they joined to when they left.
+  - "dayPlayed": Array of date repesenting every day that was found for the player
+  - "firstSeen": Date representing the oldest date found for the player.
+  - "lastSeen": Date representing the most recent date found for the player.
+  - "totalPlayed": float representing the total time played in minute.
+ - The minimum and maximum date used to display the graphs must be selectable from the graphical interface, with their min and max conresponding the the min and max dates from the imported data.
+ - A selector must also be present in the graphical interface to select if the name the player, an image or both must be used to represent them on the graphs, this image must is found at the following URL: "https://mc-heads.net/avatar/player".
+ - A radio button must be in the graphical interface to select how the data is represented, with 6 differents graphs and 1 list the must be the following:
+  - A bar chart representing the total time played by for every player, each colum represent a player and the Y-axis represents the total time player in hours.
+  - A line chart representing the total number of player connected for each day, with the area below the line being filled with a solid color, the X-axis represents the total number of player and the Y-axis represents the days.
+  - A gantt chart representing the days each player was connected, each row represents a player and the X-axis represent the days.
+  - A stacked bar graph representing the total time played for each player on each day, each column represent a day and the Y-axis represents the total time played in hours.
+  - A pie chart with the total play time for every player.
+  - Another pie chart with the number of day each player was connected.
+  - A scrollable list that show the content of the data for each player.
