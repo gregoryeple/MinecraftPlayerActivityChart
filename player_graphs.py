@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, time
 import tkinter as tk
 from io import BytesIO
 from tkinter import ttk
@@ -19,7 +19,15 @@ DATA_FOLDER = "./data"
 PLAYER_IMAGE_URL = "https://mc-heads.net/avatar/{}"
 TIME_FORMAT = "%d/%m/%Y %H:%M:%S"
 DATE_FORMAT = "%d/%m/%Y"
-
+DISPLAY_NAME = "NAME"
+DISPLAY_HEAD = "HEAD"
+DISPLAY_NAME_AND_HEAD = "BOTH"
+GRAPH_BAR_PLAY_TIME = "Total time played"
+GRAPH_LINE_PLAYER = "Daily active players"
+GRAPH_GANTT_PLAY_TIME = "Play sessions"
+GRAPH_STACK_BAR_PLAY_TIME = "Daily play time"
+GRAPH_PIE_PLAY_TIME = "Play time distribution"
+GRAPH_PIE_PLAY_DAY = "Active days distribution"
 
 # Parse and organize player data from files
 def parse_data():
@@ -42,23 +50,18 @@ def parse_data():
                         "sessions": [],
                         "dayPlayed": set(),
                         "firstSeen": date,
-                        "lastSeen": date,
-                        "totalPlayed": 0.0
+                        "lastSeen": date
                     }
                 # Update first and last seen dates
                 player_data[player]["firstSeen"] = min(player_data[player]["firstSeen"], date)
                 player_data[player]["lastSeen"] = max(player_data[player]["lastSeen"], date)
 
                 # Track sessions
-                if action == "joined":
+                if "join" in action.lower():
+                    endSession(player_data, player, date)
                     player_data[player]["sessions"].append({"start": date, "end": None})
-                elif action == "left" and player_data[player]["sessions"] and player_data[player]["sessions"][-1]["end"] is None:
-                    session = player_data[player]["sessions"][-1]
-                    session["end"] = date
-                    duration = (session["end"] - session["start"]).total_seconds() / 60  # in minutes
-                    player_data[player]["totalPlayed"] += duration
-                    player_data[player]["dayPlayed"].add(session["start"].date())
-                    player_data[player]["dayPlayed"].add(session["end"].date())
+                elif "left" in action.lower():
+                    endSession(player_data, player, date)
 
                 # Update global min and max dates
                 min_date = min(min_date, date) if min_date else date
@@ -66,9 +69,27 @@ def parse_data():
 
     for player in player_data:
         player_data[player]["dayPlayed"] = sorted(player_data[player]["dayPlayed"])
-    print(player_data)
+        endSession(player_data, player, datetime.now())
+
     return player_data, min_date, max_date
 
+def endSession(player_data, player, date):
+    if player_data[player]["sessions"] and player_data[player]["sessions"][-1]["end"] is None:
+        session = player_data[player]["sessions"][-1]
+        session["end"] = date
+        session["duration"] = (session["end"] - session["start"]).total_seconds() / 60
+        player_data[player]["dayPlayed"].add(session["start"].date())
+        player_data[player]["dayPlayed"].add(session["end"].date())
+
+def trim_dictionary(data, empty_value):
+    # Convert dictionary to list of items (key-value pairs) for ordered processing
+    items = list(data.items())
+    # Find the first non-empty entry from the start
+    start = next((i for i, (_, v) in enumerate(items) if v != empty_value), None)
+    # Find the first non-empty entry from the end
+    end = next((i for i, (_, v) in enumerate(reversed(items)) if v != empty_value), None)
+    # Slice the items list based on the determined start and end indices if there are any non-empty values
+    return dict(items[start:len(items) - end]) if start is not None and end is not None else {}
 
 # Create the main GUI class
 class MinecraftStatsApp:
@@ -77,14 +98,15 @@ class MinecraftStatsApp:
         self.data = data
         self.min_date = min_date
         self.max_date = max_date
+        self.canvas = None
 
         self.root.title("Minecraft Server Player Stats")
 
         # Define options for displaying players
-        self.display_mode = tk.StringVar(value="name")
-        self.chart_type = tk.StringVar(value="bar")
-        self.start_date = tk.StringVar(value=min_date.strftime(DATE_FORMAT))
-        self.end_date = tk.StringVar(value=max_date.strftime(DATE_FORMAT))
+        self.display_mode = tk.StringVar(value = DISPLAY_NAME)
+        self.chart_type = tk.StringVar(value = GRAPH_GANTT_PLAY_TIME)
+        self.start_date = tk.StringVar(value = min_date.strftime(DATE_FORMAT))
+        self.end_date = tk.StringVar(value = max_date.strftime(DATE_FORMAT))
 
         self.setup_ui()
         self.update_chart()
@@ -101,17 +123,20 @@ class MinecraftStatsApp:
         tk.Entry(frame, textvariable=self.end_date, width=12).pack(side=tk.LEFT)
 
         # Player representation selection
-        tk.Radiobutton(self.root, text="Player Name", variable=self.display_mode, value="name").pack()
-        tk.Radiobutton(self.root, text="Player Image", variable=self.display_mode, value="image").pack()
-        tk.Radiobutton(self.root, text="Both", variable=self.display_mode, value="both").pack()
+        frame = tk.Frame(self.root)
+        frame.pack(pady = 10)
+        tk.Radiobutton(frame, text = "Player name", variable = self.display_mode, value = DISPLAY_NAME).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Player head", variable = self.display_mode, value = DISPLAY_HEAD).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Both", variable = self.display_mode, value = DISPLAY_NAME_AND_HEAD).pack(side = tk.LEFT)
 
         # Chart type selection
-        chart_options = ["bar", "line", "gantt", "stacked_bar", "pie_total", "pie_days", "list"]
-        chart_menu = ttk.Combobox(self.root, textvariable=self.chart_type, values=chart_options)
-        chart_menu.pack(pady=10)
+        chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_LINE_PLAYER, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
+        chart_menu = ttk.Combobox(self.root, textvariable = self.chart_type, values = chart_options)
+        chart_menu.pack(pady = 10)
+        chart_menu.bind("<<ComboboxSelected>>", lambda event: self.update_chart())
 
         # Button to refresh chart
-        tk.Button(self.root, text="Update Chart", command=self.update_chart).pack()
+        tk.Button(self.root, text="Update Chart", command=self.update_chart).pack(pady=10)
 
     def get_player_image(self, player):
         try:
@@ -124,85 +149,90 @@ class MinecraftStatsApp:
             return None
 
     def update_chart(self):
-        fig = Figure(figsize=(8, 6))
+        fig = Figure(figsize=(16, 8))
         ax = fig.add_subplot(111)
 
         # Parse dates for filtering
         try:
-            start_date = datetime.strptime(self.start_date.get(), DATE_FORMAT)
-            end_date = datetime.strptime(self.end_date.get(), DATE_FORMAT)
+            start_date = datetime.combine(datetime.strptime(self.start_date.get(), DATE_FORMAT).date(), time.min)
+            end_date = datetime.combine(datetime.strptime(self.end_date.get(), DATE_FORMAT).date(), time.max)
         except ValueError:
             start_date, end_date = self.min_date, self.max_date
 
         # Filter data by date range
         filtered_data = {
             player: {
-                "sessions": [session for session in info["sessions"] if session["start"].date() >= start_date and session["end"].date() <= end_date],
-                "totalPlayed": info["totalPlayed"],
-                "dayPlayed": [day for day in info["dayPlayed"] if start_date <= day <= end_date]
+                "sessions": [{
+                    "start": max(session["start"], start_date),
+                    "end": min(session["end"], end_date),
+                    "duration": (min(session["end"], end_date) - max(session["start"], start_date)).total_seconds() / 60,
+                } for session in info["sessions"] if start_date <= session["start"] <= end_date or start_date <= session["end"] <= end_date],
+                "totalPlayed": sum([(min(session["end"], end_date) - max(session["start"], start_date)).total_seconds() / 60 for session in info["sessions"] if start_date <= session["start"] <= end_date or start_date <= session["end"] <= end_date]),
+                "dayPlayed": [day for day in info["dayPlayed"] if start_date.date() <= day <= end_date.date()]
             }
             for player, info in self.data.items()
         }
 
         # Chart selection logic
         chart_type = self.chart_type.get()
-
-        if chart_type == "bar":
+        if chart_type == GRAPH_BAR_PLAY_TIME:
             self.plot_total_time_bar_chart(ax, filtered_data)
-        elif chart_type == "line":
+        elif chart_type == GRAPH_LINE_PLAYER:
             self.plot_daily_active_players_line_chart(ax, filtered_data)
-        elif chart_type == "gantt":
+        elif chart_type == GRAPH_GANTT_PLAY_TIME:
             self.plot_gantt_chart(ax, filtered_data)
-        elif chart_type == "stacked_bar":
+        elif chart_type == GRAPH_STACK_BAR_PLAY_TIME:
             self.plot_daily_play_time_stacked_bar_chart(ax, filtered_data)
-        elif chart_type == "pie_total":
+        elif chart_type == GRAPH_PIE_PLAY_TIME:
             self.plot_total_time_pie_chart(ax, filtered_data)
-        elif chart_type == "pie_days":
+        elif chart_type == GRAPH_PIE_PLAY_DAY:
             self.plot_active_days_pie_chart(ax, filtered_data)
-        elif chart_type == "list":
+        else:
             self.show_data_list(filtered_data)
             return  # No plot needed for list
 
-        # Display figure in tkinter
+        # Remove old canvas in tkinter
         for widget in self.root.winfo_children():
-            if isinstance(widget, FigureCanvasTkAgg):
-                widget.get_tk_widget().destroy()
+            if isinstance(widget, tk.Canvas):
+                widget.destroy()
 
-        # Display figure in tkinter
+        # Display canvas in tkinter
         canvas = FigureCanvasTkAgg(fig, self.root)
         canvas.get_tk_widget().pack()
         canvas.draw()
 
     # Chart plotting methods
     def plot_total_time_bar_chart(self, ax, data):
-        players = list(data.keys())
-        total_played_hours = [info["totalPlayed"] / 60 for info in data.values()]  # Convert minutes to hours
+        players = [player for player in data.keys() if data[player]["totalPlayed"] > 0]
+        total_played_hours = [info["totalPlayed"] / 60 for info in data.values() if info["totalPlayed"] > 0]  # Convert minutes to hours
 
         ax.bar(players, total_played_hours, color="skyblue")
-        ax.set_title("Total Time Played by Each Player")
+        ax.set_title("Time played by player")
         ax.set_xlabel("Players")
-        ax.set_ylabel("Total Time Played (hours)")
+        ax.set_ylabel("Time played (hours)")
         ax.tick_params(axis='x', rotation=45)
 
     def plot_daily_active_players_line_chart(self, ax, data):
         all_dates = pd.date_range(self.min_date, self.max_date)
-        daily_active_counts = {date: 0 for date in all_dates}
+        daily_active_counts = {date.date(): 0 for date in all_dates}
 
         for info in data.values():
             for day in info["dayPlayed"]:
-                if day in daily_active_counts:
+                if day in daily_active_counts.keys():
                     daily_active_counts[day] += 1
 
+        daily_active_counts = trim_dictionary(daily_active_counts, 0)
         dates = list(daily_active_counts.keys())
         active_counts = list(daily_active_counts.values())
 
         ax.plot(dates, active_counts, color="blue", alpha=0.7)
         ax.fill_between(dates, active_counts, color="lightblue", alpha=0.5)
-        ax.set_title("Daily Active Players")
+        ax.scatter(dates, active_counts, color="blue", s=50, label="Player count")
+        ax.set_title("Daily active players")
         ax.set_xlabel("Date")
-        ax.set_ylabel("Number of Active Players")
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m-%Y"))
-        ax.xaxis.set_major_locator(mdates.WeekdayLocator())
+        ax.set_ylabel("Number of active players")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y"))
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.tick_params(axis='x', rotation=45)
 
     def plot_gantt_chart(self, ax, data):
@@ -211,55 +241,52 @@ class MinecraftStatsApp:
 
         for i, (player, info) in enumerate(data.items()):
             for session in info["sessions"]:
-                ax.barh(player, (session["end"] - session["start"]).total_seconds() / (60 * 60 * 24),
-                        left=session["start"], color="green", edgecolor="black")
+                ax.barh(player, (session["end"] - session["start"]).total_seconds() / (60 * 60 * 24), left=session["start"], color="green")
 
-        ax.set_title("Player Sessions (Gantt Chart)")
+        ax.set_title("Play sessions")
         ax.set_xlabel("Date")
         ax.set_ylabel("Players")
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m-%Y"))
-        ax.xaxis.set_major_locator(mdates.WeekdayLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y"))
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.tick_params(axis='x', rotation=45)
 
     def plot_daily_play_time_stacked_bar_chart(self, ax, data):
-        all_dates = pd.date_range(self.min_date, self.max_date)
-        daily_play_times = {player: [0] * len(all_dates) for player in data.keys()}
+        all_dates = pd.date_range(min([min(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]), max([max(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]))
+        daily_play_times = {player: [0] * len(all_dates) for player in data.keys() if data[player]["sessions"]}
 
         for i, date in enumerate(all_dates):
             for player, info in data.items():
-                daily_play_time = sum(
-                    (session["end"] - session["start"]).total_seconds() / 3600
-                    for session in info["sessions"] if session["start"].date() == date.date()
-                )
-                daily_play_times[player][i] += daily_play_time
+                if player in daily_play_times:
+                    daily_play_times[player][i] += sum((session["end"] - session["start"]).total_seconds() / 3600 for session in info["sessions"] if session["start"].date() == date.date())
 
         dates = list(all_dates)
         bottom = np.zeros(len(dates))
         for player, play_times in daily_play_times.items():
-            ax.bar(dates, play_times, bottom=bottom, label=player)
+            # A space is added because labels starting with an underscore are not shown
+            ax.bar(dates, play_times, bottom=bottom, label=rf" {player}")
             bottom += np.array(play_times)
 
-        ax.set_title("Daily Play Time (Stacked Bar Chart)")
+        ax.set_title("Daily play time")
         ax.set_xlabel("Date")
-        ax.set_ylabel("Total Play Time (hours)")
+        ax.set_ylabel("Total play time (hours)")
         ax.legend()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m-%Y"))
-        ax.xaxis.set_major_locator(mdates.WeekdayLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y"))
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.tick_params(axis='x', rotation=45)
 
     def plot_total_time_pie_chart(self, ax, data):
-        players = list(data.keys())
-        total_played_hours = [info["totalPlayed"] / 60 for info in data.values()]
+        players = [player for player in data.keys() if data[player]["totalPlayed"] > 0]
+        total_played_hours = [info["totalPlayed"] / 60 for info in data.values() if info["totalPlayed"] > 0]  # Convert minutes to hours
 
-        ax.pie(total_played_hours, labels=players, autopct="%1.1f%%", startangle=140, colors=plt.cm.Paired.colors)
-        ax.set_title("Total Play Time Distribution")
+        ax.pie(total_played_hours, labels = players, autopct = (lambda val: str(round(val / 100 * sum(total_played_hours))) + "H"), startangle = 90, colors=plt.cm.Paired.colors)
+        ax.set_title("Play time distribution")
 
     def plot_active_days_pie_chart(self, ax, data):
-        players = list(data.keys())
-        active_days_count = [len(info["dayPlayed"]) for info in data.values()]
+        players = [player for player in data.keys() if data[player]["dayPlayed"]]
+        active_days_count = [len(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]
 
-        ax.pie(active_days_count, labels=players, autopct="%1.1f%%", startangle=140, colors=plt.cm.Paired.colors)
-        ax.set_title("Active Days Distribution")
+        ax.pie(active_days_count, labels = players, autopct = (lambda val: round(val / 100 * sum(active_days_count))), startangle = 90, colors = plt.cm.Paired.colors)
+        ax.set_title("Active days distribution")
 
     def show_data_list(self, data):
         list_window = tk.Toplevel(self.root)
