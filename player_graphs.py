@@ -1,6 +1,7 @@
 import os
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+import distinctipy
 import tkinter as tk
 from io import BytesIO
 from tkinter import ttk
@@ -13,9 +14,11 @@ import pandas as pd
 from dateutil import parser as date_parser
 from urllib.request import urlopen
 from PIL import Image, ImageTk
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 # Constants
 DATA_FOLDER = "./data"
+CACHE_FOLDER = "./cache"
 PLAYER_IMAGE_URL = "https://mc-heads.net/avatar/{}"
 TIME_FORMAT = "%d/%m/%Y %H:%M:%S"
 DATE_FORMAT = "%d/%m/%Y"
@@ -49,12 +52,7 @@ def parse_data():
                     player_data[player] = {
                         "sessions": [],
                         "dayPlayed": set(),
-                        "firstSeen": date,
-                        "lastSeen": date
                     }
-                # Update first and last seen dates
-                player_data[player]["firstSeen"] = min(player_data[player]["firstSeen"], date)
-                player_data[player]["lastSeen"] = max(player_data[player]["lastSeen"], date)
 
                 # Track sessions
                 if "join" in action.lower():
@@ -67,8 +65,10 @@ def parse_data():
                 min_date = min(min_date, date) if min_date else date
                 max_date = max(max_date, date) if max_date else date
 
-    for player in player_data:
+    colors = distinctipy.get_colors(len(player_data), pastel_factor = 0.25)
+    for i, player in enumerate(player_data):
         player_data[player]["dayPlayed"] = sorted(player_data[player]["dayPlayed"])
+        player_data[player]["color"] = colors[i]
         endSession(player_data, player, datetime.now())
 
     return player_data, min_date, max_date
@@ -91,6 +91,22 @@ def trim_dictionary(data, empty_value):
     # Slice the items list based on the determined start and end indices if there are any non-empty values
     return dict(items[start:len(items) - end]) if start is not None and end is not None else {}
 
+def get_player_image(player):
+    image_path = os.path.join(CACHE_FOLDER, f"{player}.png")
+    if os.path.exists(image_path):
+        return Image.open(image_path)
+    try:
+        image_url = PLAYER_IMAGE_URL.format(player)
+        image_byt = urlopen(image_url).read()
+        image = Image.open(BytesIO(image_byt))
+        os.makedirs(CACHE_FOLDER, exist_ok = True)
+        image.save(image_path, "PNG")
+        print(f"Generated cache image for player '{player}'.")
+        return image
+    except Exception as e:
+        print(f"Image for player '{player}' not found.\nError: {e}")
+        return None
+
 # Create the main GUI class
 class MinecraftStatsApp:
     def __init__(self, root, data, min_date, max_date):
@@ -100,10 +116,10 @@ class MinecraftStatsApp:
         self.max_date = max_date
         self.canvas = None
 
-        self.root.title("Minecraft Server Player Stats")
+        self.root.title("Minecraft server player stats")
 
         # Define options for displaying players
-        self.display_mode = tk.StringVar(value = DISPLAY_NAME)
+        self.display_mode = tk.StringVar(value = DISPLAY_NAME_AND_HEAD)
         self.chart_type = tk.StringVar(value = GRAPH_GANTT_PLAY_TIME)
         self.start_date = tk.StringVar(value = min_date.strftime(DATE_FORMAT))
         self.end_date = tk.StringVar(value = max_date.strftime(DATE_FORMAT))
@@ -114,20 +130,20 @@ class MinecraftStatsApp:
     def setup_ui(self):
         # Date range selection
         frame = tk.Frame(self.root)
-        frame.pack(pady=10)
+        frame.pack(pady = 10)
 
-        tk.Label(frame, text="Start Date:").pack(side=tk.LEFT)
-        tk.Entry(frame, textvariable=self.start_date, width=12).pack(side=tk.LEFT)
+        tk.Label(frame, text = "Start Date:").pack(side = tk.LEFT)
+        tk.Entry(frame, textvariable = self.start_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
 
-        tk.Label(frame, text="End Date:").pack(side=tk.LEFT)
-        tk.Entry(frame, textvariable=self.end_date, width=12).pack(side=tk.LEFT)
+        tk.Label(frame, text = "End Date:").pack(side = tk.LEFT)
+        tk.Entry(frame, textvariable = self.end_date, width = 12).pack(side=tk.LEFT)
 
         # Player representation selection
         frame = tk.Frame(self.root)
         frame.pack(pady = 10)
-        tk.Radiobutton(frame, text = "Player name", variable = self.display_mode, value = DISPLAY_NAME).pack(side = tk.LEFT)
-        tk.Radiobutton(frame, text = "Player head", variable = self.display_mode, value = DISPLAY_HEAD).pack(side = tk.LEFT)
-        tk.Radiobutton(frame, text = "Both", variable = self.display_mode, value = DISPLAY_NAME_AND_HEAD).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Player name", variable = self.display_mode, value = DISPLAY_NAME, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Player head", variable = self.display_mode, value = DISPLAY_HEAD, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Both", variable = self.display_mode, value = DISPLAY_NAME_AND_HEAD, command = self.update_chart).pack(side = tk.LEFT)
 
         # Chart type selection
         chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_LINE_PLAYER, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
@@ -136,20 +152,10 @@ class MinecraftStatsApp:
         chart_menu.bind("<<ComboboxSelected>>", lambda event: self.update_chart())
 
         # Button to refresh chart
-        tk.Button(self.root, text="Update Chart", command=self.update_chart).pack(pady=10)
-
-    def get_player_image(self, player):
-        try:
-            image_url = PLAYER_IMAGE_URL.format(player)
-            image_byt = urlopen(image_url).read()
-            image = Image.open(BytesIO(image_byt))
-            image.thumbnail((32, 32))
-            return ImageTk.PhotoImage(image)
-        except:
-            return None
+        tk.Button(self.root, text = "Update chart", command = self.update_chart).pack(pady = 10)
 
     def update_chart(self):
-        fig = Figure(figsize=(16, 8))
+        fig = Figure(figsize=(18, 8))
         ax = fig.add_subplot(111)
 
         # Parse dates for filtering
@@ -168,7 +174,8 @@ class MinecraftStatsApp:
                     "duration": (min(session["end"], end_date) - max(session["start"], start_date)).total_seconds() / 60,
                 } for session in info["sessions"] if start_date <= session["start"] <= end_date or start_date <= session["end"] <= end_date],
                 "totalPlayed": sum([(min(session["end"], end_date) - max(session["start"], start_date)).total_seconds() / 60 for session in info["sessions"] if start_date <= session["start"] <= end_date or start_date <= session["end"] <= end_date]),
-                "dayPlayed": [day for day in info["dayPlayed"] if start_date.date() <= day <= end_date.date()]
+                "dayPlayed": [day for day in info["dayPlayed"] if start_date.date() <= day <= end_date.date()],
+                "color": info["color"]
             }
             for player, info in self.data.items()
         }
@@ -206,11 +213,22 @@ class MinecraftStatsApp:
         players = [player for player in data.keys() if data[player]["totalPlayed"] > 0]
         total_played_hours = [info["totalPlayed"] / 60 for info in data.values() if info["totalPlayed"] > 0]  # Convert minutes to hours
 
-        ax.bar(players, total_played_hours, color="skyblue")
+        ax.bar([player + (" " * (8 if self.display_mode.get() == DISPLAY_NAME_AND_HEAD else 0)) for player in players], total_played_hours, color=[data[player]["color"] for player in players])
+
+        for player in players:
+            if self.display_mode.get() in [DISPLAY_HEAD, DISPLAY_NAME_AND_HEAD]:
+                player_image = get_player_image(player)
+                if player_image:
+                    ax.add_artist(AnnotationBbox(OffsetImage(player_image, zoom = 0.1), (player + (" " * (8 if self.display_mode.get() == DISPLAY_NAME_AND_HEAD else 0)), 0), frameon = False, box_alignment = (0.5, 1.5)))
+
+        if self.display_mode.get() == DISPLAY_HEAD:
+            for label in ax.get_xticklabels():
+                label.set_color(plt.matplotlib.colors.to_rgba("white", 0))
+
         ax.set_title("Time played by player")
         ax.set_xlabel("Players")
         ax.set_ylabel("Time played (hours)")
-        ax.tick_params(axis='x', rotation=45)
+        ax.tick_params(axis = 'x', rotation = 45 if self.display_mode.get() == DISPLAY_NAME else 90)
 
     def plot_daily_active_players_line_chart(self, ax, data):
         all_dates = pd.date_range(self.min_date, self.max_date)
@@ -233,19 +251,30 @@ class MinecraftStatsApp:
         ax.set_ylabel("Number of active players")
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y"))
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-        ax.tick_params(axis='x', rotation=45)
+        ax.tick_params(axis = 'x', rotation = 45)
 
     def plot_gantt_chart(self, ax, data):
-        players = list(data.keys())
-        y_pos = range(len(players))
+        dates = pd.date_range(min([min(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]), (max([max(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]) + timedelta(days = 1)))
 
-        for i, (player, info) in enumerate(data.items()):
+        for i, (player, info) in enumerate([(player, info) for (player, info) in data.items() if info["sessions"]]):
+            if self.display_mode.get() in [DISPLAY_HEAD, DISPLAY_NAME_AND_HEAD]:
+                player_image = get_player_image(player)
+                if player_image:
+                    ax.add_artist(AnnotationBbox(OffsetImage(player_image, zoom = 0.1), (min(dates), i), frameon = False, box_alignment = (1.5, 0.5)))
             for session in info["sessions"]:
-                ax.barh(player, (session["end"] - session["start"]).total_seconds() / (60 * 60 * 24), left=session["start"], color="green")
+                ax.barh(player + (' ' * (8 if self.display_mode.get() == DISPLAY_NAME_AND_HEAD else 0)), (session["end"] - session["start"]).total_seconds() / (60 * 60 * 24), left = session["start"], color = info["color"])
+
+        for date in dates:
+            ax.axvline(date, color = "gray", linestyle = "-", linewidth = 0.5)
+
+        if self.display_mode.get() == DISPLAY_HEAD:
+            for label in ax.get_yticklabels():
+                label.set_color(plt.matplotlib.colors.to_rgba("white", 0))
 
         ax.set_title("Play sessions")
         ax.set_xlabel("Date")
         ax.set_ylabel("Players")
+        ax.set_xlim(min(dates), max(dates))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y"))
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.tick_params(axis='x', rotation=45)
@@ -263,7 +292,7 @@ class MinecraftStatsApp:
         bottom = np.zeros(len(dates))
         for player, play_times in daily_play_times.items():
             # A space is added because labels starting with an underscore are not shown
-            ax.bar(dates, play_times, bottom=bottom, label=rf" {player}")
+            ax.bar(dates, play_times, bottom = bottom, label = rf" {player}", color = data[player]["color"])
             bottom += np.array(play_times)
 
         ax.set_title("Daily play time")
@@ -278,15 +307,39 @@ class MinecraftStatsApp:
         players = [player for player in data.keys() if data[player]["totalPlayed"] > 0]
         total_played_hours = [info["totalPlayed"] / 60 for info in data.values() if info["totalPlayed"] > 0]  # Convert minutes to hours
 
-        ax.pie(total_played_hours, labels = players, autopct = (lambda val: str(round(val / 100 * sum(total_played_hours))) + "H"), startangle = 90, colors=plt.cm.Paired.colors)
         ax.set_title("Play time distribution")
+        wedges, texts, junk = ax.pie(total_played_hours, labels = players if self.display_mode.get() == DISPLAY_NAME else [("" if self.display_mode.get() == DISPLAY_HEAD else ((" " * 4) + player + (" " * 4))) for player in players], autopct = (lambda val: str(round(val / 100 * sum(total_played_hours))) + "H"), startangle = 90, colors = [data[player]["color"] for player in players])
+        # Add images next to each label
+        if self.display_mode.get() in [DISPLAY_HEAD, DISPLAY_NAME_AND_HEAD]:
+            for i, player in enumerate(players):
+                player_image = get_player_image(player)
+                if player_image:
+                    # Calculate position for annotation based on wedge angle
+                    angle = (wedges[i].theta2 - wedges[i].theta1) / 2. + wedges[i].theta1
+                    x = np.cos(np.radians(angle)) * 1.1
+                    y = np.sin(np.radians(angle)) * 1.1
+                    # Add image next to label
+                    ab = AnnotationBbox(OffsetImage(player_image, zoom = 0.1), (x, y), frameon = False, box_alignment = (0.5, 0.5))
+                    ax.add_artist(ab)
 
     def plot_active_days_pie_chart(self, ax, data):
         players = [player for player in data.keys() if data[player]["dayPlayed"]]
         active_days_count = [len(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]
 
-        ax.pie(active_days_count, labels = players, autopct = (lambda val: round(val / 100 * sum(active_days_count))), startangle = 90, colors = plt.cm.Paired.colors)
         ax.set_title("Active days distribution")
+        wedges, texts, junk = ax.pie(active_days_count, labels = players if self.display_mode.get() == DISPLAY_NAME else [("" if self.display_mode.get() == DISPLAY_HEAD else ((" " * 4) + player + (" " * 4))) for player in players], autopct = (lambda val: round(val / 100 * sum(active_days_count))), startangle = 90, colors = [data[player]["color"] for player in players])
+        # Add images next to each label
+        if self.display_mode.get() in [DISPLAY_HEAD, DISPLAY_NAME_AND_HEAD]:
+            for i, player in enumerate(players):
+                player_image = get_player_image(player)
+                if player_image:
+                    # Calculate position for annotation based on wedge angle
+                    angle = (wedges[i].theta2 - wedges[i].theta1) / 2. + wedges[i].theta1
+                    x = np.cos(np.radians(angle)) * 1.1
+                    y = np.sin(np.radians(angle)) * 1.1
+                    # Add image next to label
+                    ab = AnnotationBbox(OffsetImage(player_image, zoom = 0.1), (x, y), frameon = False, box_alignment = (0.5, 0.5))
+                    ax.add_artist(ab)
 
     def show_data_list(self, data):
         list_window = tk.Toplevel(self.root)
