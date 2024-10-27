@@ -1,6 +1,8 @@
 import os
 import re
 from datetime import datetime, time, timedelta
+from math import floor
+
 import distinctipy
 import tkinter as tk
 from io import BytesIO
@@ -136,7 +138,10 @@ class MinecraftStatsApp:
         tk.Entry(frame, textvariable = self.start_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
 
         tk.Label(frame, text = "End Date:").pack(side = tk.LEFT)
-        tk.Entry(frame, textvariable = self.end_date, width = 12).pack(side=tk.LEFT)
+        tk.Entry(frame, textvariable = self.end_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
+
+        # Button to refresh chart
+        tk.Button(frame, text = "Update chart", command = self.update_chart).pack(side = tk.LEFT)
 
         # Player representation selection
         frame = tk.Frame(self.root)
@@ -146,25 +151,31 @@ class MinecraftStatsApp:
         tk.Radiobutton(frame, text = "Both", variable = self.display_mode, value = DISPLAY_NAME_AND_HEAD, command = self.update_chart).pack(side = tk.LEFT)
 
         # Chart type selection
+        frame = tk.Frame(self.root)
+        frame.pack(pady = 10)
         chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_LINE_PLAYER, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
-        chart_menu = ttk.Combobox(self.root, textvariable = self.chart_type, values = chart_options)
-        chart_menu.pack(pady = 10)
+        chart_menu = ttk.Combobox(frame, textvariable = self.chart_type, values = chart_options)
+        chart_menu.pack(side = tk.LEFT, padx = 10)
         chart_menu.bind("<<ComboboxSelected>>", lambda event: self.update_chart())
 
-        # Button to refresh chart
-        tk.Button(self.root, text = "Update chart", command = self.update_chart).pack(pady = 10)
+        # Button to open details
+        tk.Button(frame, text = "Show details", command = lambda: self.show_data_list(self.get_filtered_data())).pack(side = tk.LEFT)
 
-    def update_chart(self):
-        fig = Figure(figsize=(18, 8))
-        ax = fig.add_subplot(111)
-
+    def get_data_dates(self):
         # Parse dates for filtering
         try:
             start_date = datetime.combine(datetime.strptime(self.start_date.get(), DATE_FORMAT).date(), time.min)
+        except ValueError:
+            start_date = self.min_date, self.max_date
+        # Parse dates for filtering
+        try:
             end_date = datetime.combine(datetime.strptime(self.end_date.get(), DATE_FORMAT).date(), time.max)
         except ValueError:
-            start_date, end_date = self.min_date, self.max_date
+            end_date = self.max_date
+        return start_date, end_date
 
+    def get_filtered_data(self):
+        start_date, end_date = self.get_data_dates()
         # Filter data by date range
         filtered_data = {
             player: {
@@ -179,6 +190,12 @@ class MinecraftStatsApp:
             }
             for player, info in self.data.items()
         }
+        return filtered_data
+
+    def update_chart(self):
+        fig = Figure(figsize=(18, 8))
+        ax = fig.add_subplot(111)
+        filtered_data = self.get_filtered_data()
 
         # Chart selection logic
         chart_type = self.chart_type.get()
@@ -342,24 +359,46 @@ class MinecraftStatsApp:
                     ax.add_artist(ab)
 
     def show_data_list(self, data):
-        list_window = tk.Toplevel(self.root)
-        list_window.title("Player Data List")
+        window = tk.Toplevel(self.root)
+        window.title("Player data " + (' - '.join([date.strftime(DATE_FORMAT) for date in self.get_data_dates()])))
+        window.geometry("250x500")
 
-        for player, info in data.items():
-            player_label = tk.Label(list_window, text=f"{player}:", font=("Arial", 10, "bold"))
-            player_label.pack(anchor="w")
+        # Add a scrollbar
+        canvas = tk.Canvas(window)
+        canvas.pack(side = "left", fill = "both", expand = 1)
+        scrollbar = tk.Scrollbar(canvas, orient = "vertical", command = canvas.yview)
+        scrollbar.pack(side = "right", fill = "y")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion = canvas.bbox("all")))
+        frame = tk.Frame(canvas, width = 500, height = 100)
+        canvas.create_window((0, 0), window = frame, anchor = "nw")
 
-            sessions_text = "\n".join([f"  Start: {s['start']}, End: {s['end']}" for s in info["sessions"]])
+        for player, info in [(player, info) for (player, info) in data.items() if info["sessions"]]:
+            label_frame = tk.Frame(frame)
+            label_frame.pack(anchor = "w")
+
+            if self.display_mode.get() in [DISPLAY_HEAD, DISPLAY_NAME_AND_HEAD]:
+                player_image = get_player_image(player)
+                if player_image:
+                    player_image = player_image.resize((25, 25))
+                    img = ImageTk.PhotoImage(player_image)
+                    image = tk.Label(label_frame, image = img)
+                    image.image = img
+                    image.pack(side = tk.LEFT, padx = (0, 5))
+            if self.display_mode.get() in [DISPLAY_NAME, DISPLAY_NAME_AND_HEAD]:
+                tk.Label(label_frame, text = f"{player}:", font = ("Arial", 12, "bold")).pack(side = tk.LEFT)
+
+            average_session = sum([session["duration"] for session in info["sessions"]]) / len(info["sessions"])
             details = (
-                f"First Seen: {info['firstSeen']}\n"
-                f"Last Seen: {info['lastSeen']}\n"
-                f"Total Played: {info['totalPlayed'] / 60:.2f} hours\n"
-                f"Days Played: {', '.join([d.strftime(DATE_FORMAT) for d in info['dayPlayed']])}\n"
-                f"Sessions:\n{sessions_text}\n"
+                f"First Seen: {info["sessions"][0]['start']}\n"
+                f"Last Seen: {info["sessions"][-1]['end']}\n"
+                f"Total Played: {floor(info['totalPlayed'] / 60):.0f}H{info['totalPlayed'] % 60:02.0f}\n"
+                f"Days Played: {len(info['dayPlayed'])}\n"
+                f"Sessions: {len(info["sessions"])}\n"
+                f"Average session: {floor(average_session / 60):.0f}H{average_session % 60:02.0f}"
             )
-            details_label = tk.Label(list_window, text=details, justify="left", font=("Arial", 9))
+            details_label = tk.Label(frame, text=details, justify="left", font=("Arial", 9))
             details_label.pack(anchor="w", padx=20)
-
 
 # Run the app
 if __name__ == "__main__":
