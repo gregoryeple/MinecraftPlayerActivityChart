@@ -386,7 +386,7 @@ class MinecraftStatsApp:
                     image.image = img
                     image.pack(side = tk.LEFT, padx = (0, 5))
             if self.display_mode.get() in [DISPLAY_NAME, DISPLAY_NAME_AND_HEAD]:
-                tk.Label(label_frame, text = f"{player}:", font = ("Arial", 12, "bold")).pack(side = tk.LEFT)
+                tk.Label(label_frame, text = f"{player}", font = ("Arial", 12, "bold")).pack(side = tk.LEFT)
 
             average_session = sum([session["duration"] for session in info["sessions"]]) / len(info["sessions"])
             details = (

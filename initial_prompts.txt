@@ -1,3 +1,4 @@
+# Inital prompt for creating the program generating the player charts:
 Using Python, create a program that will get time played for players on a minecraft server from a file and display it in a interactable graphical interface with multple graphs type with the following constraints:
  - The data must be imported from every file located in the "data" folder and these files will contains lines in the following format "[DD/MM/YYYY HH:MM:SS] player joined|left" and all of this data must be stored in an associative array using the player as the index and the content must be the following:
   - "sessions": Array of every session that the player played, from when they joined to when they left.
@@ -15,3 +16,10 @@ Using Python, create a program that will get time played for players on a minecr
   - A pie chart with the total play time for every player.
   - Another pie chart with the number of day each player was connected.
   - A scrollable list that show the content of the data for each player.
+  
+# Second prompt for creating the methods for each chart type:
+Create the logic in the update_chart method for each chart type.
+
+# Prompt for creating the program extracting data from the log files
+Using Python, create a program that will read the content of all the files inside every .tar.gz archives located inside the "data" folder, then create a new .txt file that will contains every lines matching the following format "[DDMMMYYYY HH:mm:ss.SSS] [.*]: player joined|left the game" from every extracted files.
+The saved lines must be in converted into the following format "[DD/MM/YYYY HH:mm:ss] player joined|left the game".
