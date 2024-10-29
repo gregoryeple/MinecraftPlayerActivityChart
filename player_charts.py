@@ -44,7 +44,7 @@ def parse_data():
         if os.path.isfile(filepath) and not filepath.endswith(('.zip', '.tar', '.tar.gz', '.gz', '.rar')):
             with open(filepath, "r") as file:
                 for line in file:
-                    match = re.match(r"\[(.*?)\] (\S+) (joined|left)", line)
+                    match = re.match(r"\[(.*?)\] ([a-zA-Z0-9_]{1,20}) (joined|left)", line)
                     if not match:
                         continue
                     timestamp, player, action = match.groups()
@@ -167,7 +167,7 @@ class MinecraftStatsApp:
         try:
             start_date = datetime.combine(datetime.strptime(self.start_date.get(), DATE_FORMAT).date(), time.min)
         except ValueError:
-            start_date = self.min_date, self.max_date
+            start_date = self.min_date
         # Parse dates for filtering
         try:
             end_date = datetime.combine(datetime.strptime(self.end_date.get(), DATE_FORMAT).date(), time.max)
