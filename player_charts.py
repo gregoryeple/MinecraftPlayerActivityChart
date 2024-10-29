@@ -41,31 +41,32 @@ def parse_data():
 
     for filename in os.listdir(DATA_FOLDER):
         filepath = os.path.join(DATA_FOLDER, filename)
-        with open(filepath, "r") as file:
-            for line in file:
-                match = re.match(r"\[(.*?)\] (\S+) (joined|left)", line)
-                if not match:
-                    continue
-                timestamp, player, action = match.groups()
-                date = date_parser.parse(timestamp)
+        if os.path.isfile(filepath) and not filepath.endswith(('.zip', '.tar', '.tar.gz', '.gz', '.rar')):
+            with open(filepath, "r") as file:
+                for line in file:
+                    match = re.match(r"\[(.*?)\] (\S+) (joined|left)", line)
+                    if not match:
+                        continue
+                    timestamp, player, action = match.groups()
+                    date = date_parser.parse(timestamp)
 
-                # Initialize player in dictionary if not exists
-                if player not in player_data:
-                    player_data[player] = {
-                        "sessions": [],
-                        "dayPlayed": set(),
-                    }
+                    # Initialize player in dictionary if not exists
+                    if player not in player_data:
+                        player_data[player] = {
+                            "sessions": [],
+                            "dayPlayed": set(),
+                        }
 
-                # Track sessions
-                if "join" in action.lower():
-                    endSession(player_data, player, date)
-                    player_data[player]["sessions"].append({"start": date, "end": None})
-                elif "left" in action.lower():
-                    endSession(player_data, player, date)
+                    # Track sessions
+                    if "join" in action.lower():
+                        endSession(player_data, player, date)
+                        player_data[player]["sessions"].append({"start": date, "end": None})
+                    elif "left" in action.lower():
+                        endSession(player_data, player, date)
 
-                # Update global min and max dates
-                min_date = min(min_date, date) if min_date else date
-                max_date = max(max_date, date) if max_date else date
+                    # Update global min and max dates
+                    min_date = min(min_date, date) if min_date else date
+                    max_date = max(max_date, date) if max_date else date
 
     colors = distinctipy.get_colors(len(player_data), pastel_factor = 0.25)
     for i, player in enumerate(player_data):

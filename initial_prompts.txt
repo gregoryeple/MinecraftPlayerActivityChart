@@ -23,3 +23,9 @@ Create the logic in the update_chart method for each chart type.
 # Prompt for creating the program extracting data from the log files
 Using Python, create a program that will read the content of all the files inside every .tar.gz archives located inside the "data" folder, then create a new .txt file that will contains every lines matching the following format "[DDMMMYYYY HH:mm:ss.SSS] [.*]: player joined|left the game" from every extracted files.
 The saved lines must be in converted into the following format "[DD/MM/YYYY HH:mm:ss] player joined|left the game".
+
+# Second prompt for extracting data from log files because Minecraft's logs are store inside .gz files and not .tar.gz
+Make it works with .gz files instead of .tar.gz files.
+
+# Third prompt to save the extracted data in chronological order
+Change the extraction program to save the extracted data in chronological order.
