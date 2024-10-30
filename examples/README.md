@@ -4,6 +4,10 @@
 
 ![Play sessions chart](https://github.com/gregoryeple/MinecraftPlayerActivityChart/blob/master/examples/play-sessions.png?raw=true)
 
+## Active days
+
+![Active days chart](https://github.com/gregoryeple/MinecraftPlayerActivityChart/blob/master/examples/active-days.png?raw=true)
+
 ## Daily active players
 
 ![Daily active players chart](https://github.com/gregoryeple/MinecraftPlayerActivityChart/blob/master/examples/daily-active-players.png?raw=true)
