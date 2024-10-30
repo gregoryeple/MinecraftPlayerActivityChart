@@ -7,6 +7,7 @@ import distinctipy
 import tkinter as tk
 from io import BytesIO
 from tkinter import ttk
+from tkcalendar import DateEntry
 import matplotlib.dates as mdates
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
@@ -92,6 +93,13 @@ def endSession(player_data, player, date):
         player_data[player]["dayPlayed"].add(session["start"].date())
         player_data[player]["dayPlayed"].add(session["end"].date())
 
+def format_datetime(datestr, timeofday = None, defaultdate = datetime.now()):
+    try:
+        return datetime.combine(datetime.strptime(datestr, DATE_FORMAT).date(), timeofday) if timeofday else datetime.strptime(datestr, DATE_FORMAT)
+    except ValueError:
+        return defaultdate
+
+
 def trim_dictionary(data, empty_value):
     # Convert dictionary to list of items (key-value pairs) for ordered processing
     items = list(data.items())
@@ -145,14 +153,14 @@ class MinecraftStatsApp:
         frame = tk.Frame(self.root)
         frame.pack(pady = 10)
 
-        tk.Label(frame, text = "Start Date").pack(side = tk.LEFT)
-        tk.Entry(frame, textvariable = self.start_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
+        tk.Label(frame, text = "From").pack(side = tk.LEFT)
+        DateEntry(frame, textvariable = self.start_date, date_pattern = "dd/mm/yyyy", mindate = self.min_date.date(), maxdate = self.max_date.date(), day = self.get_start_date().day, month = self.get_start_date().month, year = self.get_start_date().year).pack(side = tk.LEFT, padx = 5)
 
-        tk.Label(frame, text = "End Date").pack(side = tk.LEFT)
-        tk.Entry(frame, textvariable = self.end_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
+        tk.Label(frame, text = "To").pack(side = tk.LEFT)
+        DateEntry(frame, textvariable = self.end_date, date_pattern = "dd/mm/yyyy", mindate = self.min_date.date(), maxdate = self.max_date.date(), day = self.get_end_date().day, month = self.get_end_date().month, year = self.get_end_date().year).pack(side = tk.LEFT, padx = 5)
 
         # Button to refresh chart
-        tk.Button(frame, text = "Update chart", command = self.update_chart).pack(side = tk.LEFT)
+        tk.Button(frame, text = "Update chart", command = self.update_chart).pack(side = tk.LEFT, padx = 5)
 
         # Player sort selection
         frame = tk.Frame(self.root)
@@ -183,18 +191,14 @@ class MinecraftStatsApp:
         # Button to open details
         tk.Button(frame, text = "Show details", command = lambda: self.show_data_list(self.get_filtered_data())).pack(side = tk.LEFT)
 
+    def get_start_date(self):
+        return format_datetime(self.start_date.get(), time.min, self.min_date)
+
+    def get_end_date(self):
+        return format_datetime(self.end_date.get(), time.max, self.max_date)
+
     def get_data_dates(self):
-        # Parse dates for filtering
-        try:
-            start_date = datetime.combine(datetime.strptime(self.start_date.get(), DATE_FORMAT).date(), time.min)
-        except ValueError:
-            start_date = self.min_date
-        # Parse dates for filtering
-        try:
-            end_date = datetime.combine(datetime.strptime(self.end_date.get(), DATE_FORMAT).date(), time.max)
-        except ValueError:
-            end_date = self.max_date
-        return start_date, end_date
+        return self.get_start_date(), self.get_end_date()
 
     def get_filtered_data(self):
         start_date, end_date = self.get_data_dates()
