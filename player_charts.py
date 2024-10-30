@@ -30,6 +30,7 @@ DISPLAY_NAME_AND_HEAD = "BOTH"
 GRAPH_BAR_PLAY_TIME = "Total time played"
 GRAPH_LINE_PLAYER = "Daily active players"
 GRAPH_GANTT_PLAY_TIME = "Play sessions"
+GRAPH_GANTT_PLAY_DAY = "Active days"
 GRAPH_STACK_BAR_PLAY_TIME = "Daily play time"
 GRAPH_PIE_PLAY_TIME = "Play time distribution"
 GRAPH_PIE_PLAY_DAY = "Active days distribution"
@@ -129,12 +130,12 @@ class MinecraftStatsApp:
         self.root.title("Minecraft server player stats")
 
         # Define options for displaying players
+        self.start_date = tk.StringVar(value = max(min_date, (max_date - timedelta(days = 28)).replace(day = 1)).strftime(DATE_FORMAT))
+        self.end_date = tk.StringVar(value = max_date.strftime(DATE_FORMAT))
+        self.chart_type = tk.StringVar(value = GRAPH_GANTT_PLAY_TIME if ((max_date.date() - max(min_date, (max_date - timedelta(days = 28)).replace(day = 1)).date()).days < 30) else GRAPH_GANTT_PLAY_DAY)
         self.display_mode = tk.StringVar(value = DISPLAY_NAME_AND_HEAD)
         self.sort_mode = tk.StringVar(value = SORT_NAME)
         self.sort_reverse = tk.BooleanVar(value = False)
-        self.chart_type = tk.StringVar(value = GRAPH_GANTT_PLAY_TIME)
-        self.start_date = tk.StringVar(value = min_date.strftime(DATE_FORMAT))
-        self.end_date = tk.StringVar(value = max_date.strftime(DATE_FORMAT))
 
         self.setup_ui()
         self.update_chart()
@@ -174,7 +175,7 @@ class MinecraftStatsApp:
         # Chart type selection
         frame = tk.Frame(self.root)
         frame.pack(pady = 10)
-        chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_LINE_PLAYER, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
+        chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_GANTT_PLAY_DAY, GRAPH_LINE_PLAYER, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
         chart_menu = ttk.Combobox(frame, textvariable = self.chart_type, values = chart_options)
         chart_menu.pack(side = tk.LEFT, padx = 10)
         chart_menu.bind("<<ComboboxSelected>>", lambda event: self.update_chart())
@@ -236,7 +237,9 @@ class MinecraftStatsApp:
         elif chart_type == GRAPH_LINE_PLAYER:
             self.plot_daily_active_players_line_chart(ax, filtered_data)
         elif chart_type == GRAPH_GANTT_PLAY_TIME:
-            self.plot_gantt_chart(ax, filtered_data)
+            self.plot_gantt_chart_time(ax, filtered_data)
+        elif chart_type == GRAPH_GANTT_PLAY_DAY:
+            self.plot_gantt_chart_day(ax, filtered_data)
         elif chart_type == GRAPH_STACK_BAR_PLAY_TIME:
             self.plot_daily_play_time_stacked_bar_chart(ax, filtered_data)
         elif chart_type == GRAPH_PIE_PLAY_TIME:
@@ -302,7 +305,7 @@ class MinecraftStatsApp:
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.tick_params(axis = 'x', rotation = 45)
 
-    def plot_gantt_chart(self, ax, data):
+    def plot_gantt_chart_time(self, ax, data):
         dates = pd.date_range(min([min(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]), (max([max(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]) + timedelta(days = 1)))
 
         for i, (player, info) in enumerate([(player, info) for (player, info) in data.items() if info["sessions"]]):
@@ -321,6 +324,32 @@ class MinecraftStatsApp:
                 label.set_color(plt.matplotlib.colors.to_rgba("white", 0))
 
         ax.set_title("Play sessions")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Players")
+        ax.set_xlim(min(dates), max(dates))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y"))
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.tick_params(axis='x', rotation=45)
+
+    def plot_gantt_chart_day(self, ax, data):
+        dates = pd.date_range(min([min(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]), (max([max(info["dayPlayed"]) for info in data.values() if info["dayPlayed"]]) + timedelta(days = 1)))
+
+        for i, (player, info) in enumerate([(player, info) for (player, info) in data.items() if info["dayPlayed"]]):
+            if self.display_mode.get() in [DISPLAY_HEAD, DISPLAY_NAME_AND_HEAD]:
+                player_image = get_player_image(player)
+                if player_image:
+                    ax.add_artist(AnnotationBbox(OffsetImage(player_image, zoom = 0.1), (min(dates), i), frameon = False, box_alignment = (1.5, 0.5)))
+            for day in info["dayPlayed"]:
+                ax.barh(player + (' ' * (8 if self.display_mode.get() == DISPLAY_NAME_AND_HEAD else 0)), 1, left = day, color = info["color"])
+
+        for date in dates:
+            ax.axvline(date, color = "gray", linestyle = "-", linewidth = 0.5)
+
+        if self.display_mode.get() == DISPLAY_HEAD:
+            for label in ax.get_yticklabels():
+                label.set_color(plt.matplotlib.colors.to_rgba("white", 0))
+
+        ax.set_title("Active days")
         ax.set_xlabel("Date")
         ax.set_ylabel("Players")
         ax.set_xlim(min(dates), max(dates))
