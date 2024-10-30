@@ -33,6 +33,11 @@ GRAPH_GANTT_PLAY_TIME = "Play sessions"
 GRAPH_STACK_BAR_PLAY_TIME = "Daily play time"
 GRAPH_PIE_PLAY_TIME = "Play time distribution"
 GRAPH_PIE_PLAY_DAY = "Active days distribution"
+SORT_NAME = "NAME"
+SORT_PLAY_FIRST = "FIRST"
+SORT_PLAY_LAST = "LAST"
+SORT_PLAY_TIME = "TIME"
+SORT_PLAY_DAY = "DAY"
 
 # Parse and organize player data from files
 def parse_data():
@@ -73,6 +78,8 @@ def parse_data():
         player_data[player]["dayPlayed"] = sorted(player_data[player]["dayPlayed"])
         player_data[player]["color"] = colors[i]
         endSession(player_data, player, datetime.now())
+        if player_data[player]["sessions"]:
+            player_data[player]["sessions"] = sorted(player_data[player]["sessions"], key = lambda session: session["start"])
 
     return player_data, min_date, max_date
 
@@ -123,6 +130,8 @@ class MinecraftStatsApp:
 
         # Define options for displaying players
         self.display_mode = tk.StringVar(value = DISPLAY_NAME_AND_HEAD)
+        self.sort_mode = tk.StringVar(value = SORT_NAME)
+        self.sort_reverse = tk.BooleanVar(value = False)
         self.chart_type = tk.StringVar(value = GRAPH_GANTT_PLAY_TIME)
         self.start_date = tk.StringVar(value = min_date.strftime(DATE_FORMAT))
         self.end_date = tk.StringVar(value = max_date.strftime(DATE_FORMAT))
@@ -135,14 +144,25 @@ class MinecraftStatsApp:
         frame = tk.Frame(self.root)
         frame.pack(pady = 10)
 
-        tk.Label(frame, text = "Start Date:").pack(side = tk.LEFT)
+        tk.Label(frame, text = "Start Date").pack(side = tk.LEFT)
         tk.Entry(frame, textvariable = self.start_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
 
-        tk.Label(frame, text = "End Date:").pack(side = tk.LEFT)
+        tk.Label(frame, text = "End Date").pack(side = tk.LEFT)
         tk.Entry(frame, textvariable = self.end_date, width = 12).pack(side = tk.LEFT, padx = (0, 10))
 
         # Button to refresh chart
         tk.Button(frame, text = "Update chart", command = self.update_chart).pack(side = tk.LEFT)
+
+        # Player sort selection
+        frame = tk.Frame(self.root)
+        frame.pack(pady = 10)
+        tk.Label(frame, text = "Sort by").pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Name", variable = self.sort_mode, value = SORT_NAME, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "First seen", variable = self.sort_mode, value = SORT_PLAY_FIRST, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Last seen", variable = self.sort_mode, value = SORT_PLAY_LAST, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Play time", variable = self.sort_mode, value = SORT_PLAY_TIME, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Radiobutton(frame, text = "Day played", variable = self.sort_mode, value = SORT_PLAY_DAY, command = self.update_chart).pack(side = tk.LEFT)
+        tk.Checkbutton(frame, text = "Reverse sort", variable = self.sort_reverse, command = self.update_chart).pack(side = tk.LEFT)
 
         # Player representation selection
         frame = tk.Frame(self.root)
@@ -191,6 +211,17 @@ class MinecraftStatsApp:
             }
             for player, info in self.data.items()
         }
+        # Sort data
+        if self.sort_mode.get() == SORT_NAME:
+            filtered_data = {player: info for player, info in sorted(filtered_data.items(), key = lambda item: item[0].upper(), reverse = self.sort_reverse.get())}
+        elif self.sort_mode.get() == SORT_PLAY_FIRST:
+            filtered_data = {player: info for player, info in sorted([item for item in filtered_data.items() if item[1]["sessions"]], key = lambda item: (item[1]["sessions"][0]["start"]), reverse = self.sort_reverse.get())}
+        elif self.sort_mode.get() == SORT_PLAY_LAST:
+            filtered_data = {player: info for player, info in sorted([item for item in filtered_data.items() if item[1]["sessions"]], key = lambda item: (item[1]["sessions"][-1]["end"]), reverse = self.sort_reverse.get())}
+        elif self.sort_mode.get() == SORT_PLAY_TIME:
+            filtered_data = {player: info for player, info in sorted(filtered_data.items(), key = lambda item: item[1]["totalPlayed"], reverse = self.sort_reverse.get())}
+        elif self.sort_mode.get() == SORT_PLAY_DAY:
+            filtered_data = {player: info for player, info in sorted(filtered_data.items(), key = lambda item: len(item[1]["dayPlayed"]), reverse = self.sort_reverse.get())}
         return filtered_data
 
     def update_chart(self):
