@@ -8,6 +8,10 @@
 
 ![Active days chart](https://github.com/gregoryeple/MinecraftPlayerActivityChart/blob/master/examples/active-days.png?raw=true)
 
+## Hourly active players
+
+![Hourly active players chart](https://github.com/gregoryeple/MinecraftPlayerActivityChart/blob/master/examples/hourly-active-players.png?raw=true)
+
 ## Daily active players
 
 ![Daily active players chart](https://github.com/gregoryeple/MinecraftPlayerActivityChart/blob/master/examples/daily-active-players.png?raw=true)
