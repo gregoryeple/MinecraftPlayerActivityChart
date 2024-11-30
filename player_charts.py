@@ -29,7 +29,8 @@ DISPLAY_NAME = "NAME"
 DISPLAY_HEAD = "HEAD"
 DISPLAY_NAME_AND_HEAD = "BOTH"
 GRAPH_BAR_PLAY_TIME = "Total time played"
-GRAPH_LINE_PLAYER = "Daily active players"
+GRAPH_LINE_PLAYER_HOUR = "Hourly active players"
+GRAPH_LINE_PLAYER_DAY = "Daily active players"
 GRAPH_GANTT_PLAY_TIME = "Play sessions"
 GRAPH_GANTT_PLAY_DAY = "Active days"
 GRAPH_STACK_BAR_PLAY_TIME = "Daily play time"
@@ -183,7 +184,7 @@ class MinecraftStatsApp:
         # Chart type selection
         frame = tk.Frame(self.root)
         frame.pack(pady = 10)
-        chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_GANTT_PLAY_DAY, GRAPH_LINE_PLAYER, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
+        chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_GANTT_PLAY_DAY, GRAPH_LINE_PLAYER_HOUR, GRAPH_LINE_PLAYER_DAY, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
         chart_menu = ttk.Combobox(frame, textvariable = self.chart_type, values = chart_options)
         chart_menu.pack(side = tk.LEFT, padx = 10)
         chart_menu.bind("<<ComboboxSelected>>", lambda event: self.update_chart())
@@ -238,8 +239,10 @@ class MinecraftStatsApp:
         chart_type = self.chart_type.get()
         if chart_type == GRAPH_BAR_PLAY_TIME:
             self.plot_total_time_bar_chart(ax, filtered_data)
-        elif chart_type == GRAPH_LINE_PLAYER:
+        elif chart_type == GRAPH_LINE_PLAYER_DAY:
             self.plot_daily_active_players_line_chart(ax, filtered_data)
+        elif chart_type == GRAPH_LINE_PLAYER_HOUR:
+            self.plot_hourly_active_players_line_chart(ax, filtered_data)
         elif chart_type == GRAPH_GANTT_PLAY_TIME:
             self.plot_gantt_chart_time(ax, filtered_data)
         elif chart_type == GRAPH_GANTT_PLAY_DAY:
@@ -285,6 +288,43 @@ class MinecraftStatsApp:
         ax.set_xlabel("Players")
         ax.set_ylabel("Time played (hours)")
         ax.tick_params(axis = 'x', rotation = 45 if self.display_mode.get() == DISPLAY_NAME else 90)
+
+    def plot_hourly_active_players_line_chart(self, ax, data):
+        hourly_activity = pd.DataFrame(index=pd.date_range(self.min_date.replace(microsecond=0, second=0, minute=0), self.max_date.replace(microsecond=0, second=0, minute=0), freq='h'))
+        hourly_activity['active_players'] = 0
+        hourly_active_players = {hour: set() for hour in hourly_activity.index}
+
+        for player, details in data.items():
+            for session in details["sessions"]:
+                session_start = session["start"]
+                session_end = session["end"]
+                # Clip session times to fall within the min/max date range
+                session_start = max(session_start, self.min_date).replace(microsecond=0, second=0, minute=0)
+                session_end = min(session_end, self.max_date).replace(microsecond=0, second=0, minute=0)
+                # Create an hourly range for this session
+                hourly_range = pd.date_range(session_start, session_end, freq='h')
+                # Add the player to the active players set for these hours
+                for hour in hourly_range:
+                    if hour in hourly_active_players:
+                        hourly_active_players[hour].add(player)
+
+        # Convert the sets into counts of unique players
+        for hour, players in hourly_active_players.items():
+            hourly_activity.loc[hour, 'active_players'] = len(players)
+
+        # Remove empty values at the beginning and end
+        first_valid = hourly_activity[hourly_activity['active_players'] > 0].first_valid_index()
+        last_valid = hourly_activity[hourly_activity['active_players'] > 0].last_valid_index()
+        if first_valid is not None and last_valid is not None:
+            hourly_activity = hourly_activity.loc[first_valid:last_valid]
+
+        ax.plot(hourly_activity.index, hourly_activity['active_players'], color='blue', alpha=0.7)
+        ax.fill_between(hourly_activity.index, hourly_activity['active_players'], color='lightblue', alpha=0.5)
+        ax.set_title("Hourly active players")
+        ax.set_xlabel("Hour")
+        ax.set_ylabel("Number of active players")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%y %H:%M"))
+        ax.tick_params(axis = 'x', rotation = 45)
 
     def plot_daily_active_players_line_chart(self, ax, data):
         all_dates = pd.date_range(self.min_date, self.max_date)
