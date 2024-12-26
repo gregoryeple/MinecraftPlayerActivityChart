@@ -41,6 +41,8 @@ SORT_PLAY_FIRST = "FIRST"
 SORT_PLAY_LAST = "LAST"
 SORT_PLAY_TIME = "TIME"
 SORT_PLAY_DAY = "DAY"
+FILTER_TIME_PLAYED = "Time played (in hours)"
+FILTER_DAY_PLAYED = "Day played"
 
 # Parse and organize player data from files
 def parse_data():
@@ -100,6 +102,12 @@ def format_datetime(datestr, timeofday = None, defaultdate = datetime.now()):
     except ValueError:
         return defaultdate
 
+def format_number(numstr, defaultvalue = 0):
+    try:
+       return float(numstr)
+    except ValueError:
+        return defaultvalue
+
 
 def trim_dictionary(data, empty_value):
     # Convert dictionary to list of items (key-value pairs) for ordered processing
@@ -145,6 +153,9 @@ class MinecraftStatsApp:
         self.display_mode = tk.StringVar(value = DISPLAY_NAME_AND_HEAD)
         self.sort_mode = tk.StringVar(value = SORT_NAME)
         self.sort_reverse = tk.BooleanVar(value = False)
+        self.filter_type = tk.StringVar(value = FILTER_TIME_PLAYED)
+        self.filter_min = tk.StringVar(value = "")
+        self.filter_max = tk.StringVar(value = "")
 
         self.setup_ui()
         self.update_chart()
@@ -152,7 +163,7 @@ class MinecraftStatsApp:
     def setup_ui(self):
         # Date range selection
         frame = tk.Frame(self.root)
-        frame.pack(pady = 10)
+        frame.pack(pady = 5)
 
         tk.Label(frame, text = "From").pack(side = tk.LEFT)
         DateEntry(frame, textvariable = self.start_date, date_pattern = "dd/mm/yyyy", mindate = self.min_date.date(), maxdate = self.max_date.date(), day = self.get_start_date().day, month = self.get_start_date().month, year = self.get_start_date().year).pack(side = tk.LEFT, padx = 5)
@@ -163,9 +174,22 @@ class MinecraftStatsApp:
         # Button to refresh chart
         tk.Button(frame, text = "Update chart", command = self.update_chart).pack(side = tk.LEFT, padx = 5)
 
+        # Player filter selection
+        frame = tk.Frame(self.root)
+        frame.pack(pady = 5)
+
+        tk.Label(frame, text="Filter by").pack(side=tk.LEFT)
+        ttk.Combobox(frame, textvariable=self.filter_type, values=[FILTER_TIME_PLAYED, FILTER_DAY_PLAYED]).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(frame, text="Min").pack(side=tk.LEFT)
+        tk.Entry(frame, textvariable=self.filter_min, width=5).pack(side=tk.LEFT, padx=5)
+
+        tk.Label(frame, text="Max").pack(side=tk.LEFT)
+        tk.Entry(frame, textvariable=self.filter_max, width=5).pack(side=tk.LEFT, padx=5)
+
         # Player sort selection
         frame = tk.Frame(self.root)
-        frame.pack(pady = 10)
+        frame.pack(pady = 5)
         tk.Label(frame, text = "Sort by").pack(side = tk.LEFT)
         tk.Radiobutton(frame, text = "Name", variable = self.sort_mode, value = SORT_NAME, command = self.update_chart).pack(side = tk.LEFT)
         tk.Radiobutton(frame, text = "First seen", variable = self.sort_mode, value = SORT_PLAY_FIRST, command = self.update_chart).pack(side = tk.LEFT)
@@ -176,14 +200,14 @@ class MinecraftStatsApp:
 
         # Player representation selection
         frame = tk.Frame(self.root)
-        frame.pack(pady = 10)
+        frame.pack(pady = 5)
         tk.Radiobutton(frame, text = "Player name", variable = self.display_mode, value = DISPLAY_NAME, command = self.update_chart).pack(side = tk.LEFT)
         tk.Radiobutton(frame, text = "Player head", variable = self.display_mode, value = DISPLAY_HEAD, command = self.update_chart).pack(side = tk.LEFT)
         tk.Radiobutton(frame, text = "Both", variable = self.display_mode, value = DISPLAY_NAME_AND_HEAD, command = self.update_chart).pack(side = tk.LEFT)
 
         # Chart type selection
         frame = tk.Frame(self.root)
-        frame.pack(pady = 10)
+        frame.pack(pady = 5)
         chart_options = [GRAPH_GANTT_PLAY_TIME, GRAPH_GANTT_PLAY_DAY, GRAPH_LINE_PLAYER_HOUR, GRAPH_LINE_PLAYER_DAY, GRAPH_STACK_BAR_PLAY_TIME, GRAPH_BAR_PLAY_TIME, GRAPH_PIE_PLAY_TIME, GRAPH_PIE_PLAY_DAY]
         chart_menu = ttk.Combobox(frame, textvariable = self.chart_type, values = chart_options)
         chart_menu.pack(side = tk.LEFT, padx = 10)
@@ -201,6 +225,15 @@ class MinecraftStatsApp:
     def get_data_dates(self):
         return self.get_start_date(), self.get_end_date()
 
+    def get_filter_min(self):
+        return format_number(self.filter_min.get(), 0)
+
+    def get_filter_max(self):
+        return format_number(self.filter_max.get(), 0)
+
+    def get_data_filters(self):
+        return self.get_filter_min(), self.get_filter_max()
+
     def get_filtered_data(self):
         start_date, end_date = self.get_data_dates()
         # Filter data by date range
@@ -217,6 +250,13 @@ class MinecraftStatsApp:
             }
             for player, info in self.data.items()
         }
+        # Filter data
+        filter_min, filter_max = self.get_data_filters()
+        if filter_min > 0 or filter_max > 0:
+            if self.filter_type.get() == FILTER_TIME_PLAYED:
+                filtered_data = {player: info for player, info in filtered_data.items() if (filter_min <= 0 or info["totalPlayed"] >= (filter_min * 60)) and (filter_max <= 0 or info["totalPlayed"] <= (filter_max * 60))}
+            elif self.filter_type.get() == FILTER_DAY_PLAYED:
+                filtered_data = {player: info for player, info in filtered_data.items() if (filter_min <= 0 or len(info["dayPlayed"]) >= filter_min) and (filter_max <= 0 or len(info["dayPlayed"]) <= filter_max)}
         # Sort data
         if self.sort_mode.get() == SORT_NAME:
             filtered_data = {player: info for player, info in sorted(filtered_data.items(), key = lambda item: item[0].upper(), reverse = self.sort_reverse.get())}
