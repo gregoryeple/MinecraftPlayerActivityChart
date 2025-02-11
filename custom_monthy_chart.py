@@ -54,7 +54,7 @@ def select_from_list(options, title = "Select an option"):
         btn.pack(pady=5, padx=10, fill="x")
     # Run the event loop
     root.mainloop()
-    return result  # Return selected value
+    return result
 
 def plot_stacked_bar_chart(ax, months, categories, colors, values):
     x = np.arange(len(months))
@@ -75,11 +75,11 @@ def plot_line_chart(ax, months, values):
     ax.scatter(months, total_values, color="blue", s=50)
 
 def plot_bar_chart(ax, categories, colors, values):
-    total_values = [sum(value) for value in values]  # Convert minutes to hours
+    total_values = [sum(value) for value in values]
     ax.bar(categories, total_values, color=colors)
 
 def plot_pie_chart(ax, categories, colors, values):
-    total_values = [sum(value) for value in values]  # Convert minutes to hours
+    total_values = [sum(value) for value in values]
     ax.pie(total_values, labels=categories, autopct=(lambda val: str(round(val / 100 * sum(total_values)))), startangle=0, colors=colors)
 
 
