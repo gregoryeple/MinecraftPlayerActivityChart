@@ -1,8 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import tkinter as tk
 import csv
 from dateutil.relativedelta import relativedelta
 from datetime import datetime
+from tkinter import simpledialog
 
 # Constants
 DATA_FILE = './data/data.csv'
@@ -36,6 +38,24 @@ def read_csv():
 def generate_months(start_month, num_months):
     start_date = datetime.strptime(start_month, "%m-%Y")
     return [(start_date + relativedelta(months=i)).strftime("%b %Y") for i in range(num_months)]
+
+def select_from_list(options):
+    result = None  # Variable to store the selected option
+    def on_select(value):
+        nonlocal result
+        result = value
+        root.destroy()
+    # Create popup window
+    root = tk.Tk()
+    root.title("Select an Option")
+    root.geometry("300x200")
+    # Create buttons for each option
+    for option in options:
+        btn = tk.Button(root, text=option, command=lambda opt=option: on_select(opt))
+        btn.pack(pady=5, padx=10, fill="x")
+    # Run the event loop
+    root.mainloop()
+    return result  # Return selected value
 
 def plot_stacked_bar_chart(ax, months, categories, colors, values):
     x = np.arange(len(months))

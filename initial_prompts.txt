@@ -40,3 +40,6 @@ The .csv file will contains the following data:
  
 # Second prompt for padding values
 The values inside the data may not all have the same number of element, write a same function that will fill every value list with 0 until they reach the size of the longest one.
+
+# Third prompt for the select popup
+Using Python, create a popup that will allow the user to select beetween a list of string by clicking on them, and then close the popup while returning the selected string 
