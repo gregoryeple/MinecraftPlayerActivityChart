@@ -4,7 +4,6 @@ import tkinter as tk
 import csv
 from dateutil.relativedelta import relativedelta
 from datetime import datetime
-from tkinter import simpledialog
 
 # Constants
 DATA_FILE = './data/data.csv'
@@ -12,7 +11,7 @@ GRAPH_STACKED_BAR = "Stacked bar chart"
 GRAPH_LINE = "Line Chart"
 GRAPH_BAR = "Bar chart"
 GRAPH_PIE = "Pie Chart"
-DEFAULT_TYPE = GRAPH_STACKED_BAR
+DEFAULT_TYPE = None
 AVAILABLE_GRAPH_TYPE = [GRAPH_STACKED_BAR, GRAPH_LINE, GRAPH_BAR, GRAPH_PIE]
 
 def read_csv():
@@ -39,7 +38,7 @@ def generate_months(start_month, num_months):
     start_date = datetime.strptime(start_month, "%m-%Y")
     return [(start_date + relativedelta(months=i)).strftime("%b %Y") for i in range(num_months)]
 
-def select_from_list(options):
+def select_from_list(options, title = "Select an option"):
     result = None  # Variable to store the selected option
     def on_select(value):
         nonlocal result
@@ -47,8 +46,8 @@ def select_from_list(options):
         root.destroy()
     # Create popup window
     root = tk.Tk()
-    root.title("Select an Option")
-    root.geometry("300x200")
+    root.title(title)
+    root.geometry("300x" + str(len(options) * 37))
     # Create buttons for each option
     for option in options:
         btn = tk.Button(root, text=option, command=lambda opt=option: on_select(opt))
@@ -84,7 +83,7 @@ def plot_pie_chart(ax, categories, colors, values):
     ax.pie(total_values, labels=categories, autopct=(lambda val: str(round(val / 100 * sum(total_values)))), startangle=0, colors=colors)
 
 
-def show_chart(chart_type):
+def show_chart(chart_type, show_select = True):
     if chart_type in AVAILABLE_GRAPH_TYPE:
         title, y_label, x_label, start_month, categories, colors, values = read_csv()
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -106,7 +105,7 @@ def show_chart(chart_type):
             ax.get_yaxis().set_visible(False)
         plt.tight_layout()
         plt.show()
-    else:
-        return show_chart(GRAPH_STACKED_BAR)
+    elif show_select:
+        return show_chart(select_from_list(AVAILABLE_GRAPH_TYPE, "Select a chart type"), False)
 
 show_chart(DEFAULT_TYPE)
