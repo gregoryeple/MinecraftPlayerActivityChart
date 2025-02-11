@@ -29,3 +29,14 @@ Make it works with .gz files instead of .tar.gz files.
 
 # Third prompt to save the extracted data in chronological order
 Change the extraction program to save the extracted data in chronological order.
+
+# Prompt for creating the program that crate a stacked bart chart from a .csv file
+Using Python and matplotlib, create a program that will generate a stacked bar chart from a .csv file.
+The X axis will correspond to a month and the Y axis will correspond to a number.
+The .csv file will contains the following data:
+ - The first line will contain the Title of the graph, followed by the name of the Y axis and then the name of the X axis.
+ - The second line will contains the starting month of the data, in the "MM-YYYY" format
+ - The rest of the file will contains the data to be inserted in the graph using the following format: "Name;#Color;ValuesForEachMonth"
+ 
+# Second prompt for padding values
+The values inside the data may not all have the same number of element, write a same function that will fill every value list with 0 until they reach the size of the longest one.
